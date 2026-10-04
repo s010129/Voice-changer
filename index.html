@@ -1,0 +1,941 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>即時變聲器</title>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg-deep:   #0a0e1a;
+  --bg-panel:  #111827;
+  --bg-panel2: #0f1626;
+  --cyan:      #4dd8ff;
+  --cyan-hi:   #00d4ff;
+  --gold:      #ffd166;
+  --danger:    #ff6b6b;
+  --ok:        #4ade80;
+  --text:      #e2e8f0;
+  --text-dim:  #94a3b8;
+  --border:    rgba(77, 216, 255, 0.25);
+  --glow:      0 0 12px rgba(77, 216, 255, 0.35);
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  background: var(--bg-deep);
+  background-image:
+    radial-gradient(circle at 20% 30%, rgba(77,216,255,0.05) 0%, transparent 40%),
+    radial-gradient(circle at 80% 70%, rgba(255,209,102,0.04) 0%, transparent 40%),
+    linear-gradient(rgba(77,216,255,0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(77,216,255,0.03) 1px, transparent 1px);
+  background-size: 100% 100%, 100% 100%, 40px 40px, 40px 40px;
+  color: var(--text);
+  font-family: 'Noto Sans TC', sans-serif;
+  line-height: 1.6;
+  min-height: 100vh;
+  padding: 24px 16px;
+}
+.wrap { max-width: 960px; margin: 0 auto; }
+h1 {
+  font-family: 'Orbitron', 'Noto Sans TC', sans-serif;
+  color: var(--cyan);
+  text-shadow: var(--glow);
+  font-size: clamp(1.5rem, 4vw, 2.2rem);
+  letter-spacing: 2px;
+  text-align: center;
+}
+.subtitle { text-align: center; color: var(--text-dim); margin: 8px 0 20px; }
+a { color: var(--cyan); }
+a:hover { color: var(--cyan-hi); }
+
+/* 訊號流程 */
+.flow {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  flex-wrap: wrap; margin-bottom: 24px;
+}
+.flow .node {
+  background: var(--bg-panel2); border: 1px solid var(--border); border-radius: 10px;
+  padding: 6px 12px; font-size: 0.92rem; white-space: nowrap;
+}
+.flow .node.hl { border-color: var(--gold); color: var(--gold); }
+.flow .arrow { color: var(--cyan); font-family: 'Orbitron', monospace; }
+
+.banner {
+  border: 1px solid var(--danger); background: rgba(255,107,107,0.08);
+  border-radius: 10px; padding: 12px 16px; margin-bottom: 20px; display: none;
+}
+.banner.show { display: block; }
+
+.card {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 0 8px rgba(77,216,255,0.08);
+  padding: 20px;
+  margin-bottom: 20px;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.card:hover { border-color: rgba(77,216,255,0.45); }
+.card h2 {
+  font-family: 'Orbitron', 'Noto Sans TC', sans-serif;
+  color: var(--cyan);
+  font-size: 1.05rem;
+  letter-spacing: 1px;
+  margin-bottom: 14px;
+  border-left: 3px solid var(--cyan);
+  padding-left: 10px;
+}
+.card h3 { font-size: 0.95rem; color: var(--gold); margin: 16px 0 6px; font-weight: 500; }
+.sgroup { margin-bottom: 8px; }
+.sgroup h3 { margin-top: 0; }
+
+.btn {
+  font-family: 'Noto Sans TC', sans-serif;
+  background: var(--bg-panel2);
+  color: var(--cyan);
+  border: 1px solid var(--cyan);
+  border-radius: 8px;
+  padding: 10px 22px;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.btn:hover { background: var(--cyan-hi); color: var(--bg-deep); box-shadow: var(--glow); }
+.btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.btn-gold { color: var(--gold); border-color: var(--gold); }
+.btn-gold:hover { background: var(--gold); color: var(--bg-deep); box-shadow: 0 0 12px rgba(255,209,102,0.35); }
+.btn-start { font-size: 1.1rem; font-weight: 700; padding: 12px 28px; }
+.btn-start.running { color: var(--danger); border-color: var(--danger); }
+.btn-start.running:hover { background: var(--danger); color: var(--bg-deep); box-shadow: 0 0 12px rgba(255,107,107,0.4); }
+.btn.active { background: var(--danger); border-color: var(--danger); color: var(--bg-deep); }
+.value { font-family: 'Orbitron', monospace; color: var(--gold); }
+.controls { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+
+/* 裝置選擇 */
+.grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-bottom: 16px; }
+.field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.field .lbl { font-size: 0.88rem; color: var(--text-dim); }
+.field .lbl b { color: var(--text); font-weight: 500; }
+select {
+  width: 100%; min-width: 0;
+  background: var(--bg-panel2); color: var(--text);
+  border: 1px solid var(--border); border-radius: 8px;
+  padding: 10px 12px; font: inherit; font-size: 0.92rem;
+  transition: all 0.2s; cursor: pointer;
+}
+select:hover, select:focus { border-color: var(--cyan-hi); box-shadow: var(--glow); outline: none; }
+select:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.toggles { display: flex; gap: 18px; flex-wrap: wrap; margin-bottom: 16px; font-size: 0.9rem; color: var(--text-dim); }
+.toggle { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; user-select: none; }
+.toggle input { appearance: none; -webkit-appearance: none; width: 36px; height: 20px; border-radius: 999px;
+  background: var(--bg-panel2); border: 1px solid var(--border); position: relative; cursor: pointer; transition: all 0.2s; flex: none; }
+.toggle input::after { content: ''; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%;
+  background: var(--text-dim); transition: all 0.2s; }
+.toggle input:checked { border-color: var(--cyan); background: rgba(77,216,255,0.2); }
+.toggle input:checked::after { left: 18px; background: var(--cyan); box-shadow: var(--glow); }
+
+.status { display: inline-flex; align-items: center; gap: 8px; font-size: 0.9rem; color: var(--text-dim); }
+.status .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--text-dim); flex: none; }
+.status.on .dot { background: var(--ok); box-shadow: 0 0 8px var(--ok); }
+.status.err .dot { background: var(--danger); box-shadow: 0 0 8px var(--danger); }
+.status.err { color: var(--danger); }
+
+/* 音量表 */
+.meters { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 16px; }
+.meter-row { display: grid; grid-template-columns: 3em 1fr; gap: 8px; align-items: center; font-size: 0.85rem; color: var(--text-dim); }
+.meter { height: 10px; border-radius: 999px; background: var(--bg-panel2); border: 1px solid var(--border); overflow: hidden; }
+.meter-fill { height: 100%; width: 0%; background: linear-gradient(90deg, var(--cyan), var(--cyan-hi)); box-shadow: var(--glow); transition: width 0.05s linear; }
+.meter-fill.hot { background: linear-gradient(90deg, var(--cyan), var(--gold), var(--danger)); }
+.latency { margin-top: 10px; font-size: 0.85rem; color: var(--text-dim); }
+
+/* 預設 */
+.presets { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }
+.preset {
+  background: var(--bg-panel2); border: 1px solid var(--border); border-radius: 10px;
+  color: var(--text); padding: 12px 10px; cursor: pointer; text-align: center; font: inherit;
+  transition: all 0.2s; display: flex; flex-direction: column; align-items: center; gap: 2px;
+}
+.preset:hover { border-color: var(--cyan-hi); box-shadow: var(--glow); }
+.preset .ico { font-size: 1.6rem; line-height: 1.2; }
+.preset .nm { font-weight: 700; }
+.preset .ds { font-size: 0.78rem; color: var(--text-dim); }
+.preset.active { border-color: var(--gold); box-shadow: 0 0 12px rgba(255,209,102,0.35); }
+.preset.active .nm { color: var(--gold); }
+.custom-tag { font-size: 0.85rem; color: var(--text-dim); margin-top: 10px; }
+
+/* 滑桿 */
+.sgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 28px; }
+.sgroup { min-width: 0; }
+.srow { display: grid; grid-template-columns: 6.5em 1fr 6.2em; gap: 10px; align-items: center; padding: 5px 0; font-size: 0.9rem; }
+.srow .v { text-align: right; font-size: 0.82rem; }
+input[type=range] { width: 100%; accent-color: var(--cyan); cursor: pointer; height: 22px; }
+
+/* 教學 */
+.tabs { display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; }
+.tab { padding: 8px 18px; font-size: 0.95rem; }
+.tab.active { background: var(--cyan); color: var(--bg-deep); }
+.pane { display: none; }
+.pane.active { display: block; }
+ol.steps { list-style: none; counter-reset: s; }
+ol.steps li { counter-increment: s; position: relative; padding: 4px 0 10px 40px; }
+ol.steps li::before {
+  content: counter(s); position: absolute; left: 0; top: 3px; width: 28px; height: 28px; border-radius: 50%;
+  border: 1px solid var(--cyan); color: var(--cyan); font-family: 'Orbitron', monospace; font-size: 0.85rem;
+  display: flex; align-items: center; justify-content: center; box-shadow: var(--glow);
+}
+.dev { font-family: Consolas, 'Courier New', monospace; color: var(--gold); background: rgba(255,209,102,0.08);
+  padding: 1px 6px; border-radius: 4px; font-size: 0.88em; word-break: break-word; }
+code { font-family: Consolas, 'Courier New', monospace; color: var(--cyan); background: rgba(77,216,255,0.08); padding: 1px 6px; border-radius: 4px; }
+.note { border-left: 3px solid var(--gold); background: rgba(255,209,102,0.06); padding: 10px 14px; border-radius: 0 8px 8px 0; margin-top: 12px; font-size: 0.92rem; }
+.note.warn { border-left-color: var(--danger); background: rgba(255,107,107,0.07); }
+ul.tips { padding-left: 1.2em; }
+ul.tips li { margin: 6px 0; }
+
+footer { text-align: center; color: var(--text-dim); font-size: 0.8rem; margin-top: 8px; }
+
+@media (max-width: 760px) {
+  .grid3 { grid-template-columns: 1fr; }
+  .sgrid { grid-template-columns: 1fr; }
+  .meters { grid-template-columns: 1fr; }
+}
+@media (max-width: 600px) {
+  .controls { flex-direction: column; align-items: stretch; }
+  .btn { width: 100%; }
+  .tabs .btn { width: auto; flex: 1; }
+  .srow { grid-template-columns: 1fr auto; }
+  .srow input[type=range] { grid-column: 1 / -1; grid-row: 2; }
+  .flow .arrow { transform: rotate(90deg); }
+  .flow { flex-direction: column; }
+}
+#toast {
+  position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%) translateY(20px);
+  background: var(--bg-panel); border: 1px solid var(--cyan); border-radius: 8px;
+  color: var(--text); padding: 10px 20px; opacity: 0; pointer-events: none;
+  transition: all 0.3s; box-shadow: var(--glow); z-index: 999; max-width: 90vw;
+}
+#toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>即時變聲器</h1>
+  <p class="subtitle">把外接麥克風的聲音即時變聲,再送進 LINE / Discord 電腦版通話</p>
+
+  <div class="flow" aria-label="訊號流程">
+    <span class="node">🎤 外接麥克風</span><span class="arrow">➜</span>
+    <span class="node hl">🎛️ 這個網頁(變聲)</span><span class="arrow">➜</span>
+    <span class="node">🔌 虛擬音源線</span><span class="arrow">➜</span>
+    <span class="node">💬 LINE / Discord</span>
+  </div>
+
+  <div class="banner" id="bannerIframe">
+    ⚠️ 這個頁面被嵌在其他網站裡,瀏覽器會擋掉麥克風和輸出裝置選擇。請
+    <a id="openSelf" href="#" target="_blank" rel="noopener">在新分頁開啟</a>。
+  </div>
+  <div class="banner" id="bannerBrowser"></div>
+
+  <!-- ① 裝置 -->
+  <div class="card">
+    <h2>① 裝置與開關</h2>
+    <div class="grid3">
+      <label class="field">
+        <span class="lbl"><b>輸入</b>:你的外接麥克風</span>
+        <select id="selInput"><option value="">預設麥克風</option></select>
+      </label>
+      <label class="field">
+        <span class="lbl"><b>輸出到通話</b>:選虛擬音源線 ⭐</span>
+        <select id="selOutput"><option value="">預設喇叭</option></select>
+      </label>
+      <label class="field">
+        <span class="lbl"><b>監聽</b>:自己聽(建議耳機)</span>
+        <select id="selMonitor"><option value="off">不監聽</option></select>
+      </label>
+    </div>
+
+    <div class="toggles">
+      <label class="toggle"><input type="checkbox" id="tgNs" checked>瀏覽器降噪</label>
+      <label class="toggle"><input type="checkbox" id="tgEc">回音消除</label>
+      <label class="toggle"><input type="checkbox" id="tgAgc">自動增益</label>
+    </div>
+
+    <div class="controls">
+      <button class="btn btn-start" id="btnStart" data-action="start">▶ 啟動變聲</button>
+      <button class="btn" id="btnMute" data-action="mute" disabled>🔇 靜音</button>
+      <button class="btn btn-gold" data-action="refresh">↻ 重新整理裝置</button>
+      <span class="status" id="status"><span class="dot"></span><span id="statusText">尚未啟動</span></span>
+    </div>
+
+    <div class="meters">
+      <div class="meter-row"><span>輸入</span><div class="meter"><div class="meter-fill" id="mIn"></div></div></div>
+      <div class="meter-row"><span>輸出</span><div class="meter"><div class="meter-fill" id="mOut"></div></div></div>
+    </div>
+    <div class="latency" id="latency"></div>
+  </div>
+
+  <!-- ② 預設 -->
+  <div class="card">
+    <h2>② 聲音預設</h2>
+    <div class="presets" id="presets"></div>
+    <div class="custom-tag" id="customTag"></div>
+  </div>
+
+  <!-- ③ 細部 -->
+  <div class="card">
+    <h2>③ 細部調整</h2>
+    <div class="sgrid" id="sliders"></div>
+  </div>
+
+  <!-- ④ 教學 -->
+  <div class="card">
+    <h2>④ 接到 LINE / Discord(第一次設定)</h2>
+    <div class="tabs">
+      <button class="btn tab" data-action="tab" data-tab="win">Windows</button>
+      <button class="btn tab" data-action="tab" data-tab="mac">macOS</button>
+    </div>
+
+    <div class="pane" id="pane-win">
+      <ol class="steps">
+        <li>安裝免費的虛擬音源線 <b>VB-CABLE</b>:到
+          <a href="https://vb-audio.com/Cable/" target="_blank" rel="noopener">vb-audio.com/Cable</a> 下載,解壓縮後對
+          <code>VBCABLE_Setup_x64.exe</code> 按右鍵 →「以系統管理員身分執行」→ Install Driver,裝完<b>重新開機</b>。</li>
+        <li>用 <b>Chrome 或 Edge</b> 打開這個網頁,按「啟動變聲」並允許使用麥克風。</li>
+        <li><b>輸入</b>選你的外接麥克風;<b>輸出到通話</b>選
+          <span class="dev">CABLE Input (VB-Audio Virtual Cable)</span>(偵測到會自動幫你選)。</li>
+        <li><b>Discord</b>:使用者設定 → 語音與視訊 → 輸入裝置選
+          <span class="dev">CABLE Output (VB-Audio Virtual Cable)</span>。</li>
+        <li><b>LINE 電腦版</b>:設定 → 通話 → 麥克風選
+          <span class="dev">CABLE Output (VB-Audio Virtual Cable)</span>。</li>
+        <li>想聽到自己變聲後的聲音:<b>監聽</b>選你的耳機。</li>
+      </ol>
+      <div class="note warn">不要把 CABLE Input 設成 Windows 的「預設播放裝置」,否則 YouTube、通知音等所有電腦聲音都會跑進通話裡。</div>
+    </div>
+
+    <div class="pane" id="pane-mac">
+      <ol class="steps">
+        <li>安裝免費的虛擬音源線 <b>BlackHole 2ch</b>:到
+          <a href="https://existential.audio/blackhole/" target="_blank" rel="noopener">existential.audio/blackhole</a> 下載,
+          或用 Homebrew:<code>brew install blackhole-2ch</code>。裝完建議重新開機。</li>
+        <li>用 <b>Chrome</b> 打開這個網頁,按「啟動變聲」並允許麥克風(若沒跳出詢問:系統設定 → 隱私權與安全性 → 麥克風 → 打開 Chrome)。</li>
+        <li><b>輸入</b>選你的外接麥克風;<b>輸出到通話</b>選 <span class="dev">BlackHole 2ch</span>。</li>
+        <li><b>Discord</b>:使用者設定 → 語音與視訊 → 輸入裝置選 <span class="dev">BlackHole 2ch</span>。</li>
+        <li><b>LINE 電腦版</b>:設定 → 通話 → 麥克風選 <span class="dev">BlackHole 2ch</span>。</li>
+        <li>想聽到自己變聲後的聲音:<b>監聽</b>選你的耳機。</li>
+      </ol>
+    </div>
+
+    <h3>常見問題</h3>
+    <ul class="tips">
+      <li><b>手機版 LINE / Discord 沒辦法用</b>:手機系統不允許別的 App 假裝成麥克風,只能在<b>電腦版</b>通話使用。</li>
+      <li><b>Discord 效果不見或斷斷續續</b>:到 語音與視訊 關掉「雜訊抑制(Krisp)」和「回音消除」,它們會把機器人、回音等效果當成雜訊濾掉;輸入靈敏度建議改手動。</li>
+      <li><b>網頁分頁要保持開著</b>(可以縮小視窗,但不要關掉),關掉通話就沒聲音。</li>
+      <li><b>出現尖銳嘯叫</b>:戴耳機,不要讓喇叭的聲音被麥克風收進去。</li>
+      <li><b>「輸入」不要選 CABLE Output / BlackHole</b>,那樣會讓聲音自己繞圈,網頁會提醒你。</li>
+      <li><b>聲音有爆音或卡頓</b>:關掉其他吃 CPU 的程式;Windows 可到「聲音設定」把麥克風和 CABLE 的取樣率都設成 48000 Hz。</li>
+      <li><b>延遲</b>:變調大約多 30 ms,總延遲通常在 50–100 ms,講話不太會感覺到。</li>
+    </ul>
+  </div>
+
+  <footer>建議使用 Chrome / Edge 110 以上・所有聲音都在你的電腦上處理,不會上傳</footer>
+</div>
+
+<div id="toast"></div>
+
+<!-- 變調器(AudioWorklet):雙讀取頭延遲線 + sin² 交叉淡化,
+     每次讀取頭跳回時用互相關找波形最吻合的位置,避免兩個讀取頭反相抵消 -->
+<script type="text/plain" id="pitchWorklet">
+class PitchShifter extends AudioWorkletProcessor {
+  static get parameterDescriptors() {
+    return [{ name: 'ratio', defaultValue: 1, minValue: 0.25, maxValue: 4, automationRate: 'k-rate' }];
+  }
+  constructor() {
+    super();
+    this.size = 32768;
+    this.mask = this.size - 1;
+    this.buf = new Float32Array(this.size);
+    this.w = 0;
+    this.win = Math.round(sampleRate * 0.05);     // 每個顆粒 50 ms
+    this.search = Math.round(sampleRate * 0.007); // 對齊搜尋範圍 ±7 ms(涵蓋 70 Hz 以上的人聲)
+    this.corr = Math.round(sampleRate * 0.012);   // 比對長度 12 ms
+    this.base = this.search + 2;                  // 最小延遲,確保加上偏移後仍是過去的樣本
+    this.phase = 0;
+    this.off = [0, 0];
+    this.wet = 0; // 原聲 ↔ 變調 之間平滑切換,避免爆音
+  }
+  tap(d) {
+    const pos = this.w - d;
+    const i = Math.floor(pos);
+    const f = pos - i;
+    const a = this.buf[i & this.mask];
+    const b = this.buf[(i + 1) & this.mask];
+    return a + (b - a) * f;
+  }
+  score(cand, ref, stride) {
+    const buf = this.buf, mask = this.mask;
+    let c = 0, e = 0;
+    for (let k = 0; k < this.corr; k += stride) {
+      const a = buf[(cand - k) & mask];
+      c += a * buf[(ref - k) & mask];
+      e += a * a;
+    }
+    return c / Math.sqrt(e + 1e-9);
+  }
+  // 回傳讓「延遲 dNew 的新顆粒」與「延遲 dRef 的另一個讀取頭」最同相的偏移
+  align(dNew, dRef) {
+    const ref = this.w - Math.round(dRef);
+    const cand = this.w - Math.round(dNew);
+    let refE = 0;
+    for (let k = 0; k < this.corr; k += 4) { const r = this.buf[(ref - k) & this.mask]; refE += r * r; }
+    if (refE < 1e-7) return 0; // 沒聲音就不用對齊
+    let best = -Infinity, bestO = 0;
+    for (let o = -this.search; o <= this.search; o += 2) {
+      const s = this.score(cand - o, ref, 2);
+      if (s > best) { best = s; bestO = o; }
+    }
+    const lo = Math.max(-this.search, bestO - 2), hi = Math.min(this.search, bestO + 2);
+    for (let o = lo; o <= hi; o++) {
+      const s = this.score(cand - o, ref, 1);
+      if (s > best) { best = s; bestO = o; }
+    }
+    return bestO;
+  }
+  process(inputs, outputs, params) {
+    const out = outputs[0][0];
+    if (!out) return true;
+    const inp = inputs[0] && inputs[0][0];
+    const ratio = params.ratio[0];
+    const target = Math.abs(ratio - 1) > 1e-3 ? 1 : 0;
+    const step = (1 - ratio) / this.win;
+    const win = this.win, base = this.base;
+    for (let i = 0; i < out.length; i++) {
+      const x = inp ? inp[i] : 0;
+      this.buf[this.w] = x;
+      if (this.wet !== target) {
+        this.wet += target > this.wet ? 1 / 1024 : -1 / 1024;
+        if (this.wet < 0) this.wet = 0;
+        if (this.wet > 1) this.wet = 1;
+      }
+      if (this.wet === 0) {
+        out[i] = x;
+      } else {
+        const p1 = this.phase;
+        const p2 = p1 < 0.5 ? p1 + 0.5 : p1 - 0.5;
+        const s = Math.sin(Math.PI * p1);
+        const g1 = s * s;
+        const d1 = base + p1 * win + this.off[0];
+        const d2 = base + p2 * win + this.off[1];
+        const y = this.tap(d1) * g1 + this.tap(d2) * (1 - g1);
+        out[i] = x + (y - x) * this.wet;
+
+        // 讀取頭跳回時(此時它的音量剛好是 0)重新對齊
+        let np = p1 + step, wrapped = false;
+        if (np >= 1) { np -= 1; wrapped = true; }
+        else if (np < 0) { np += 1; wrapped = true; }
+        this.phase = np;
+        if (wrapped) {
+          this.off[0] = this.align(base + np * win, d2);
+        } else if ((p1 < 0.5) !== (np < 0.5)) {
+          const np2 = np < 0.5 ? np + 0.5 : np - 0.5;
+          this.off[1] = this.align(base + np2 * win, d1);
+        }
+      }
+      this.w = (this.w + 1) & this.mask;
+    }
+    return true;
+  }
+}
+registerProcessor('pitch-shifter', PitchShifter);
+</script>
+
+<script>
+'use strict';
+const $ = (id) => document.getElementById(id);
+
+// ---------- 參數 ----------
+const BASE = { pitch: 0, ringFreq: 50, ringMix: 0, drive: 0, lowCut: 40, highCut: 18000, echoTime: 250, echoFb: 0.35, echoMix: 0, revMix: 0 };
+const P = Object.assign({}, BASE, { inGain: 1, outGain: 1, monitorVol: 0.8, ns: true, ec: false, agc: false });
+
+const PRESETS = [
+  { id: 'orig',     ico: '🎙️', nm: '原聲',        ds: '不加效果',     p: {} },
+  { id: 'high',     ico: '👧', nm: '高音 / 女聲', ds: '音高 +5',      p: { pitch: 5, lowCut: 120 } },
+  { id: 'low',      ico: '🧔', nm: '低沉 / 男聲', ds: '音高 −5',      p: { pitch: -5 } },
+  { id: 'chipmunk', ico: '🐿️', nm: '花栗鼠',      ds: '音高 +10',     p: { pitch: 10, lowCut: 150 } },
+  { id: 'monster',  ico: '👹', nm: '怪獸',        ds: '超低音 + 失真', p: { pitch: -10, drive: 0.35, revMix: 0.2, highCut: 6000 } },
+  { id: 'robot',    ico: '🤖', nm: '機器人',      ds: '金屬調變',     p: { ringFreq: 55, ringMix: 0.8, echoTime: 12, echoFb: 0.55, echoMix: 0.45 } },
+  { id: 'alien',    ico: '👽', nm: '外星人',      ds: '怪異諧波',     p: { pitch: 3, ringFreq: 420, ringMix: 0.55, echoTime: 35, echoFb: 0.3, echoMix: 0.25 } },
+  { id: 'radio',    ico: '📻', nm: '電話 / 對講機', ds: '窄頻 + 顆粒', p: { lowCut: 400, highCut: 3200, drive: 0.25 } },
+  { id: 'cave',     ico: '⛰️', nm: '山洞回音',    ds: '回音 + 殘響',  p: { echoTime: 300, echoFb: 0.45, echoMix: 0.35, revMix: 0.3 } },
+  { id: 'hall',     ico: '🏟️', nm: '演唱會',      ds: '大殘響',       p: { revMix: 0.45, lowCut: 80 } },
+];
+
+const pct = (v) => Math.round(v * 100) + '%';
+const hz = (v) => (v >= 1000 ? (v / 1000).toFixed(1) + ' kHz' : Math.round(v) + ' Hz');
+const SLIDERS = [
+  { group: '音高', items: [
+    { k: 'pitch', label: '音高', min: -12, max: 12, step: 0.5, fmt: (v) => (v > 0 ? '+' : '') + v.toFixed(1) + ' 半音' },
+  ] },
+  { group: '音量', items: [
+    { k: 'inGain', label: '麥克風增益', min: 0, max: 3, step: 0.01, fmt: pct },
+    { k: 'outGain', label: '輸出音量', min: 0, max: 3, step: 0.01, fmt: pct },
+    { k: 'monitorVol', label: '監聽音量', min: 0, max: 1.5, step: 0.01, fmt: pct },
+  ] },
+  { group: '機器人 / 外星人(環形調變)', items: [
+    { k: 'ringMix', label: '強度', min: 0, max: 1, step: 0.01, fmt: pct },
+    { k: 'ringFreq', label: '頻率', min: 20, max: 1000, log: true, fmt: hz },
+  ] },
+  { group: '音色', items: [
+    { k: 'drive', label: '失真', min: 0, max: 1, step: 0.01, fmt: pct },
+    { k: 'lowCut', label: '低頻截止', min: 20, max: 1000, log: true, fmt: hz },
+    { k: 'highCut', label: '高頻截止', min: 1000, max: 20000, log: true, fmt: hz },
+  ] },
+  { group: '空間', items: [
+    { k: 'echoMix', label: '回音量', min: 0, max: 1, step: 0.01, fmt: pct },
+    { k: 'echoTime', label: '回音間隔', min: 10, max: 1000, log: true, fmt: (v) => Math.round(v) + ' ms' },
+    { k: 'echoFb', label: '回音次數', min: 0, max: 0.9, step: 0.01, fmt: pct },
+    { k: 'revMix', label: '殘響', min: 0, max: 1, step: 0.01, fmt: pct },
+  ] },
+];
+const SLIDER_BY_KEY = {};
+SLIDERS.forEach((g) => g.items.forEach((it) => { SLIDER_BY_KEY[it.k] = it; }));
+
+// ---------- 狀態 ----------
+const S = {
+  ctx: null, stream: null, src: null, n: null,
+  running: false, busy: false, muted: false, workletOK: false,
+  monitorOn: false, outputAuto: false, raf: 0, preset: 'orig',
+};
+const VIRTUAL_RE = /cable|vb-audio|blackhole|voicemeeter|virtual|loopback|soundflower/i;
+const mainAudio = new Audio();
+const monitorAudio = new Audio();
+const CAN_CTX_SINK = typeof AudioContext !== 'undefined' && 'setSinkId' in AudioContext.prototype;
+const CAN_EL_SINK = 'setSinkId' in HTMLMediaElement.prototype;
+
+// ---------- UI 小工具 ----------
+let toastTimer = null;
+function showToast(msg, ms) {
+  const t = $('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), ms || 2600);
+}
+function setStatus(text, kind) {
+  $('status').className = 'status' + (kind ? ' ' + kind : '');
+  $('statusText').textContent = text;
+}
+
+function buildPresetUI() {
+  $('presets').innerHTML = PRESETS.map((p) =>
+    `<button class="preset${p.id === S.preset ? ' active' : ''}" data-action="preset" data-id="${p.id}">` +
+    `<span class="ico">${p.ico}</span><span class="nm">${p.nm}</span><span class="ds">${p.ds}</span></button>`
+  ).join('');
+}
+function markPreset(id) {
+  S.preset = id;
+  document.querySelectorAll('.preset').forEach((el) => el.classList.toggle('active', el.dataset.id === id));
+  $('customTag').textContent = id ? '' : '目前為自訂設定(在預設基礎上調整過)';
+}
+
+function toSlider(it, v) {
+  if (!it.log) return v;
+  return Math.round(1000 * Math.log(v / it.min) / Math.log(it.max / it.min));
+}
+function fromSlider(it, s) {
+  if (!it.log) return parseFloat(s);
+  return it.min * Math.pow(it.max / it.min, s / 1000);
+}
+function buildSliderUI() {
+  $('sliders').innerHTML = SLIDERS.map((g) =>
+    `<div class="sgroup"><h3>${g.group}</h3>` +
+    g.items.map((it) => {
+      const range = it.log ? 'min="0" max="1000" step="1"' : `min="${it.min}" max="${it.max}" step="${it.step}"`;
+      return `<div class="srow"><span>${it.label}</span>` +
+        `<input type="range" data-k="${it.k}" ${range} value="${toSlider(it, P[it.k])}" aria-label="${it.label}">` +
+        `<span class="v value" id="v-${it.k}">${it.fmt(P[it.k])}</span></div>`;
+    }).join('') + '</div>'
+  ).join('');
+}
+function syncSliders() {
+  document.querySelectorAll('input[type=range][data-k]').forEach((el) => {
+    const it = SLIDER_BY_KEY[el.dataset.k];
+    el.value = toSlider(it, P[it.k]);
+    $('v-' + it.k).textContent = it.fmt(P[it.k]);
+  });
+}
+
+// ---------- 音訊 ----------
+function makeImpulse(ctx, seconds, decay) {
+  const len = Math.floor(ctx.sampleRate * seconds);
+  const buf = ctx.createBuffer(2, len, ctx.sampleRate);
+  for (let ch = 0; ch < 2; ch++) {
+    const d = buf.getChannelData(ch);
+    for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, decay);
+  }
+  return buf;
+}
+function makeCurve(k) {
+  if (k <= 0.001) return null;
+  const g = 1 + k * 30, n = 2048, c = new Float32Array(n), norm = Math.tanh(g);
+  for (let i = 0; i < n; i++) { const x = (i / (n - 1)) * 2 - 1; c[i] = Math.tanh(g * x) / norm; }
+  return c;
+}
+
+function buildGraph(ctx) {
+  const mono = { channelCount: 1, channelCountMode: 'explicit', channelInterpretation: 'speakers' };
+  const n = {};
+  n.inGain = new GainNode(ctx, Object.assign({ gain: P.inGain }, mono));
+  n.inMeter = new AnalyserNode(ctx, { fftSize: 1024 });
+  n.hp = new BiquadFilterNode(ctx, { type: 'highpass', frequency: P.lowCut, Q: 0.707 });
+  n.lp = new BiquadFilterNode(ctx, { type: 'lowpass', frequency: P.highCut, Q: 0.707 });
+  n.pitch = S.workletOK
+    ? new AudioWorkletNode(ctx, 'pitch-shifter', Object.assign({ outputChannelCount: [1] }, mono))
+    : new GainNode(ctx);
+
+  // 環形調變(機器人 / 外星人)
+  n.ringDry = new GainNode(ctx, { gain: 1 - P.ringMix });
+  n.ringVCA = new GainNode(ctx, { gain: 0 });
+  n.ringWet = new GainNode(ctx, { gain: P.ringMix });
+  n.ringOsc = new OscillatorNode(ctx, { frequency: P.ringFreq });
+  n.ringOsc.connect(n.ringVCA.gain);
+  n.ringOsc.start();
+
+  n.shaper = new WaveShaperNode(ctx);
+  n.sum = new GainNode(ctx);
+  n.delay = new DelayNode(ctx, { maxDelayTime: 1.5, delayTime: P.echoTime / 1000 });
+  n.fb = new GainNode(ctx, { gain: P.echoFb });
+  n.echoWet = new GainNode(ctx, { gain: P.echoMix });
+  n.conv = new ConvolverNode(ctx, { buffer: makeImpulse(ctx, 2.6, 2.5) });
+  n.revWet = new GainNode(ctx, { gain: P.revMix });
+  n.outGain = new GainNode(ctx, { gain: P.outGain });
+  n.limiter = new DynamicsCompressorNode(ctx, { threshold: -3, knee: 0, ratio: 20, attack: 0.002, release: 0.15 });
+  n.mute = new GainNode(ctx, { gain: S.muted ? 0 : 1 });
+  n.outMeter = new AnalyserNode(ctx, { fftSize: 1024 });
+  n.monGain = new GainNode(ctx, { gain: 0 });
+  n.monDest = new MediaStreamAudioDestinationNode(ctx);
+
+  n.inGain.connect(n.inMeter);
+  n.inGain.connect(n.hp).connect(n.lp).connect(n.pitch);
+  n.pitch.connect(n.ringDry).connect(n.shaper);
+  n.pitch.connect(n.ringVCA).connect(n.ringWet).connect(n.shaper);
+  n.shaper.connect(n.sum);
+  n.shaper.connect(n.delay);
+  n.delay.connect(n.fb).connect(n.delay);
+  n.delay.connect(n.echoWet).connect(n.sum);
+  n.shaper.connect(n.conv).connect(n.revWet).connect(n.sum);
+  n.sum.connect(n.outGain).connect(n.limiter).connect(n.mute);
+  n.mute.connect(n.outMeter);
+  n.mute.connect(n.monGain).connect(n.monDest);
+  monitorAudio.srcObject = n.monDest.stream;
+
+  if (CAN_CTX_SINK) {
+    n.mute.connect(ctx.destination);
+  } else {
+    n.mainDest = new MediaStreamAudioDestinationNode(ctx);
+    n.mute.connect(n.mainDest);
+    mainAudio.srcObject = n.mainDest.stream;
+  }
+  S.n = n;
+  applyParam('drive');
+  applyParam('pitch');
+}
+
+function applyParam(k) {
+  const n = S.n;
+  if (!n) return;
+  const t = S.ctx.currentTime;
+  const set = (param, v) => param.setTargetAtTime(v, t, 0.03);
+  switch (k) {
+    case 'pitch':
+      if (n.pitch.parameters) set(n.pitch.parameters.get('ratio'), Math.pow(2, P.pitch / 12));
+      break;
+    case 'ringFreq': set(n.ringOsc.frequency, P.ringFreq); break;
+    case 'ringMix': set(n.ringDry.gain, 1 - P.ringMix); set(n.ringWet.gain, P.ringMix); break;
+    case 'drive':
+      n.shaper.curve = makeCurve(P.drive);
+      n.shaper.oversample = P.drive > 0.001 ? '2x' : 'none';
+      break;
+    case 'lowCut': set(n.hp.frequency, P.lowCut); break;
+    case 'highCut': set(n.lp.frequency, P.highCut); break;
+    case 'echoTime': set(n.delay.delayTime, P.echoTime / 1000); break;
+    case 'echoFb': set(n.fb.gain, P.echoFb); break;
+    case 'echoMix': set(n.echoWet.gain, P.echoMix); break;
+    case 'revMix': set(n.revWet.gain, P.revMix); break;
+    case 'inGain': set(n.inGain.gain, P.inGain); break;
+    case 'outGain': set(n.outGain.gain, P.outGain); break;
+    case 'monitorVol': set(n.monGain.gain, S.monitorOn ? P.monitorVol : 0); break;
+  }
+}
+function applyAll() { Object.keys(BASE).forEach(applyParam); }
+
+function applyPreset(id) {
+  const p = PRESETS.find((x) => x.id === id);
+  if (!p) return;
+  Object.assign(P, BASE, p.p);
+  syncSliders();
+  applyAll();
+  markPreset(id);
+}
+
+async function openMic() {
+  if (S.stream) S.stream.getTracks().forEach((t) => t.stop());
+  if (S.src) S.src.disconnect();
+  const audio = {
+    echoCancellation: P.ec, noiseSuppression: P.ns, autoGainControl: P.agc,
+    channelCount: { ideal: 1 },
+  };
+  const id = $('selInput').value;
+  if (id) audio.deviceId = { exact: id };
+  try {
+    S.stream = await navigator.mediaDevices.getUserMedia({ audio });
+  } catch (err) {
+    if (!id || err.name !== 'OverconstrainedError') throw err;
+    delete audio.deviceId; // 選的裝置不見了,改用預設
+    S.stream = await navigator.mediaDevices.getUserMedia({ audio });
+  }
+  S.src = new MediaStreamAudioSourceNode(S.ctx, { mediaStream: S.stream });
+  S.src.connect(S.n.inGain);
+
+  const label = (S.stream.getAudioTracks()[0] || {}).label || '';
+  if (VIRTUAL_RE.test(label)) {
+    showToast('⚠️ 輸入選到虛擬音源線「' + label + '」,聲音會繞圈。請改選你的實體麥克風。', 6000);
+  }
+}
+
+function fillSelect(sel, devices, opts) {
+  const prev = sel.value;
+  const head = opts.head || [];
+  sel.innerHTML = '';
+  head.forEach(([v, t]) => sel.add(new Option(t, v)));
+  devices.forEach((d, i) => {
+    const name = d.label || (opts.fallback + ' ' + (i + 1));
+    sel.add(new Option((opts.star && VIRTUAL_RE.test(d.label) ? '⭐ ' : '') + name, d.deviceId));
+  });
+  if ([...sel.options].some((o) => o.value === prev)) sel.value = prev;
+}
+
+async function refreshDevices() {
+  if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) return;
+  const all = await navigator.mediaDevices.enumerateDevices();
+  const ins = all.filter((d) => d.kind === 'audioinput' && d.deviceId);
+  const outs = all.filter((d) => d.kind === 'audiooutput' && d.deviceId);
+  const labeled = all.some((d) => d.label);
+
+  fillSelect($('selInput'), ins.filter((d) => d.deviceId !== 'default' && d.deviceId !== 'communications'),
+    { head: [['', '預設麥克風']], fallback: '麥克風' });
+  fillSelect($('selOutput'), outs.filter((d) => d.deviceId !== 'default'),
+    { head: [['', '預設喇叭 / 耳機']], fallback: '輸出裝置', star: true });
+  fillSelect($('selMonitor'), outs.filter((d) => d.deviceId !== 'default'),
+    { head: [['off', '不監聽'], ['', '預設喇叭 / 耳機']], fallback: '輸出裝置', star: true });
+
+  // 第一次拿到裝置名稱時,自動幫忙選虛擬音源線
+  if (labeled && !S.outputAuto && $('selOutput').value === '') {
+    const v = outs.find((d) => d.deviceId !== 'default' && d.deviceId !== 'communications' && VIRTUAL_RE.test(d.label));
+    if (v) {
+      $('selOutput').value = v.deviceId;
+      S.outputAuto = true;
+      showToast('已自動選擇虛擬音源線:' + v.label, 4000);
+    }
+  }
+  const hasVirtual = outs.some((d) => VIRTUAL_RE.test(d.label));
+  return { labeled, hasVirtual };
+}
+
+async function applyOutput() {
+  if (!S.ctx) return;
+  const id = $('selOutput').value;
+  try {
+    if (CAN_CTX_SINK) await S.ctx.setSinkId(id);
+    else if (CAN_EL_SINK) { await mainAudio.setSinkId(id); await mainAudio.play(); }
+    else await mainAudio.play();
+  } catch (err) {
+    showToast('切換輸出裝置失敗:' + err.message, 5000);
+  }
+}
+
+async function applyMonitor() {
+  if (!S.n) return;
+  const id = $('selMonitor').value;
+  S.monitorOn = id !== 'off';
+  applyParam('monitorVol');
+  if (!S.monitorOn) { monitorAudio.pause(); return; }
+  if (id === $('selOutput').value) showToast('監聽和輸出是同一個裝置,你會聽到兩次聲音', 4000);
+  try {
+    if (CAN_EL_SINK) await monitorAudio.setSinkId(id);
+    await monitorAudio.play();
+  } catch (err) {
+    showToast('切換監聽裝置失敗:' + err.message, 5000);
+  }
+}
+
+function errorText(err) {
+  switch (err && err.name) {
+    case 'NotAllowedError': return '麥克風權限被拒絕:請點網址列左邊的圖示,把麥克風改成「允許」後重新整理';
+    case 'NotFoundError': return '找不到麥克風,請確認外接裝置有插好';
+    case 'NotReadableError': return '麥克風被其他程式占用,或驅動有問題';
+    default: return '啟動失敗:' + (err && err.message ? err.message : err);
+  }
+}
+
+// 直接雙擊開檔(file://)時 blob: 網址會被擋,所以先用 data: 網址
+async function loadWorklet(ctx) {
+  const src = $('pitchWorklet').textContent;
+  const urls = [
+    () => 'data:application/javascript;charset=utf-8,' + encodeURIComponent(src),
+    () => URL.createObjectURL(new Blob([src], { type: 'application/javascript' })),
+  ];
+  for (const mk of urls) {
+    try { await ctx.audioWorklet.addModule(mk()); return true; } catch (err) { console.warn('worklet load failed', err); }
+  }
+  return false;
+}
+
+async function start() {
+  if (S.busy) return;
+  if (S.running) { stop(); return; }
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    setStatus('這個網址無法使用麥克風:請用 https 網址,或直接用 Chrome 開啟 html 檔', 'err');
+    return;
+  }
+  S.busy = true;
+  setStatus('啟動中…');
+  try {
+    S.ctx = new AudioContext({ latencyHint: 'interactive' });
+    S.workletOK = await loadWorklet(S.ctx);
+    if (!S.workletOK) showToast('這個瀏覽器無法變調,其他效果仍可使用', 5000);
+    buildGraph(S.ctx);
+    applyAll();
+    await openMic();
+    const info = await refreshDevices();
+    await applyOutput();
+    await applyMonitor();
+    if (S.ctx.state !== 'running') await S.ctx.resume();
+
+    S.running = true;
+    $('btnStart').textContent = '■ 停止';
+    $('btnStart').classList.add('running');
+    $('btnMute').disabled = false;
+    setStatus(info && !info.hasVirtual
+      ? '運作中・沒偵測到虛擬音源線(見 ④ 安裝),目前輸出到喇叭,請戴耳機'
+      : '運作中', 'on');
+    meterLoop();
+  } catch (err) {
+    console.error(err);
+    teardown();
+    setStatus(errorText(err), 'err');
+  } finally {
+    S.busy = false;
+  }
+}
+
+function teardown() {
+  cancelAnimationFrame(S.raf);
+  if (S.stream) S.stream.getTracks().forEach((t) => t.stop());
+  monitorAudio.pause(); monitorAudio.srcObject = null;
+  mainAudio.pause(); mainAudio.srcObject = null;
+  if (S.ctx) S.ctx.close();
+  S.ctx = null; S.stream = null; S.src = null; S.n = null; S.running = false; S.monitorOn = false;
+  $('btnStart').textContent = '▶ 啟動變聲';
+  $('btnStart').classList.remove('running');
+  $('btnMute').disabled = true;
+  $('mIn').style.width = '0%';
+  $('mOut').style.width = '0%';
+  $('latency').textContent = '';
+}
+function stop() { teardown(); setStatus('已停止'); }
+
+function toggleMute() {
+  S.muted = !S.muted;
+  if (S.n) S.n.mute.gain.setTargetAtTime(S.muted ? 0 : 1, S.ctx.currentTime, 0.01);
+  $('btnMute').classList.toggle('active', S.muted);
+  $('btnMute').textContent = S.muted ? '🔇 已靜音(按此恢復)' : '🔇 靜音';
+}
+
+// ---------- 音量表 ----------
+const meterBuf = new Float32Array(1024);
+const meterVal = { mIn: 0, mOut: 0 };
+let lastLatency = 0;
+function drawMeter(an, id) {
+  an.getFloatTimeDomainData(meterBuf);
+  let pk = 0;
+  for (let i = 0; i < meterBuf.length; i++) { const a = Math.abs(meterBuf[i]); if (a > pk) pk = a; }
+  const lvl = Math.max(0, Math.min(1, (20 * Math.log10(pk + 1e-9) + 60) / 60));
+  meterVal[id] = Math.max(lvl, meterVal[id] * 0.9);
+  const el = $(id);
+  el.style.width = (meterVal[id] * 100).toFixed(1) + '%';
+  el.classList.toggle('hot', pk > 0.95);
+}
+function meterLoop() {
+  if (!S.running || !S.n) return;
+  drawMeter(S.n.inMeter, 'mIn');
+  drawMeter(S.n.outMeter, 'mOut');
+  const now = performance.now();
+  if (now - lastLatency > 1000) {
+    lastLatency = now;
+    const ms = ((S.ctx.baseLatency || 0) + (S.ctx.outputLatency || 0)) * 1000 + (S.workletOK && P.pitch !== 0 ? 32 : 0);
+    $('latency').innerHTML = '估計延遲 <span class="value">' + Math.round(ms) + ' ms</span>・取樣率 <span class="value">' + S.ctx.sampleRate + ' Hz</span>';
+  }
+  S.raf = requestAnimationFrame(meterLoop);
+}
+
+// ---------- 事件(capture-phase 委派)----------
+function selectTab(tab) {
+  document.querySelectorAll('.tab').forEach((el) => el.classList.toggle('active', el.dataset.tab === tab));
+  document.querySelectorAll('.pane').forEach((el) => el.classList.toggle('active', el.id === 'pane-' + tab));
+}
+
+document.addEventListener('click', (e) => {
+  const el = e.target.closest('[data-action]');
+  if (!el) return;
+  const action = el.dataset.action;
+  if (action === 'start') start();
+  if (action === 'mute') toggleMute();
+  if (action === 'preset') applyPreset(el.dataset.id);
+  if (action === 'tab') selectTab(el.dataset.tab);
+  if (action === 'refresh') {
+    refreshDevices().then(() => showToast('裝置清單已更新')).catch((err) => showToast('讀取裝置失敗:' + err.message));
+  }
+}, true);
+
+document.addEventListener('input', (e) => {
+  const el = e.target;
+  if (!el.matches('input[type=range][data-k]')) return;
+  const it = SLIDER_BY_KEY[el.dataset.k];
+  P[it.k] = fromSlider(it, el.value);
+  $('v-' + it.k).textContent = it.fmt(P[it.k]);
+  applyParam(it.k);
+  if (it.k in BASE && S.preset) markPreset(null);
+}, true);
+
+document.addEventListener('change', (e) => {
+  const id = e.target.id;
+  if (id === 'selInput' && S.running) openMic().catch((err) => setStatus(errorText(err), 'err'));
+  if (id === 'selOutput' && S.running) { applyOutput(); if (S.monitorOn) applyMonitor(); }
+  if (id === 'selMonitor' && S.running) applyMonitor();
+  if (id === 'tgNs' || id === 'tgEc' || id === 'tgAgc') {
+    P.ns = $('tgNs').checked; P.ec = $('tgEc').checked; P.agc = $('tgAgc').checked;
+    if (S.running) openMic().catch((err) => setStatus(errorText(err), 'err'));
+  }
+}, true);
+
+if (navigator.mediaDevices && navigator.mediaDevices.addEventListener) {
+  navigator.mediaDevices.addEventListener('devicechange', () => { refreshDevices().catch(() => {}); });
+}
+
+// ---------- 初始化 ----------
+buildPresetUI();
+buildSliderUI();
+markPreset('orig');
+selectTab(/Mac/i.test(navigator.platform || navigator.userAgent) ? 'mac' : 'win');
+refreshDevices().catch(() => {});
+
+if (window.top !== window.self) {
+  $('openSelf').href = location.href;
+  $('bannerIframe').classList.add('show');
+}
+if (!CAN_CTX_SINK && !CAN_EL_SINK) {
+  $('bannerBrowser').textContent = '⚠️ 這個瀏覽器不能選擇輸出裝置,聲音只會從預設喇叭出來,沒辦法送進通話。請改用 Chrome 或 Edge。';
+  $('bannerBrowser').classList.add('show');
+}
+</script>
+</body>
+</html>
